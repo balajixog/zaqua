@@ -1,0 +1,67 @@
+# Arduino build files
+*.elf
+*.bin
+*.hex
+*.eep
+*.map
+
+# Arduino temporary files
+*.o
+*.obj
+*.d
+*.a
+
+# PlatformIO
+.pio/
+.vscode/
+.vscode/.browse.c_cpp.db*
+.vscode/ipch/
+
+# Arduino IDE
+*.ino.cpp
+*.ino.cpp.d
+*.ino.elf
+
+# ESP-IDF
+build/
+sdkconfig
+sdkconfig.old
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# JetBrains IDEs
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+*.old
+*.orig
+
+# Python (if used for data analysis)
+__pycache__/
+*.pyc
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# CSV datasets generated during testing (optional)
+output/
+logs/
