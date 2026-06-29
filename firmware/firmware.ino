@@ -7,6 +7,9 @@
 // ---------- RELAY LOGIC ----------
 #define PUMP_ON   HIGH
 #define PUMP_OFF  LOW
+// ---------- SOIL SENSOR CALIBRATION ----------
+#define AIR_VALUE      3271
+#define WATER_VALUE    1080
 // ---------------- GLOBAL VARIABLES ----------------
 volatile long pulseCount = 0;
 
@@ -14,6 +17,31 @@ volatile long pulseCount = 0;
 void IRAM_ATTR flowISR()
 {
     pulseCount++;
+}
+float readSoilMoisture()
+{
+    long total = 0;
+
+    // Average 10 readings to reduce noise
+    for (int i = 0; i < 10; i++)
+    {
+        total += analogRead(SOIL_PIN);
+        delay(5);
+    }
+
+    int rawValue = total / 10;
+
+    float moisture = map(
+        rawValue,
+        AIR_VALUE,
+        WATER_VALUE,
+        0,
+        100
+    );
+
+    moisture = constrain(moisture, 0.0, 100.0);
+
+    return moisture;
 }
 void setup()
 {
@@ -45,6 +73,13 @@ void setup()
     Serial.println("==================================");
 }
 
-void loop() {
+void loop()
+{
+    float soilMoisture = readSoilMoisture();
 
+    Serial.print("Soil Moisture: ");
+    Serial.print(soilMoisture);
+    Serial.println("%");
+
+    delay(1000);
 }
