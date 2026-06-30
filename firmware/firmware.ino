@@ -10,6 +10,8 @@
 // ---------- SOIL SENSOR CALIBRATION ----------
 #define AIR_VALUE      3271
 #define WATER_VALUE    1080
+// ---------- FLOW SENSOR CALIBRATION ----------
+#define PULSES_PER_LITRE 517.0
 // ---------------- GLOBAL VARIABLES ----------------
 volatile long pulseCount = 0;
 
@@ -42,6 +44,20 @@ float readSoilMoisture()
     moisture = constrain(moisture, 0.0, 100.0);
 
     return moisture;
+}
+float readFlowRate()
+{
+    long startPulses = pulseCount;
+
+    delay(1000);
+
+    long endPulses = pulseCount;
+
+    long pulseDifference = endPulses - startPulses;
+
+    float litresPerSecond = pulseDifference / PULSES_PER_LITRE;
+
+    return litresPerSecond * 60.0;
 }
 void setup()
 {
@@ -76,10 +92,12 @@ void setup()
 void loop()
 {
     float soilMoisture = readSoilMoisture();
-
-    Serial.print("Soil Moisture: ");
+    float flowRate = readFlowRate();
+    Serial.print("Soil Moisture : ");
     Serial.print(soilMoisture);
     Serial.println("%");
-
-    delay(1000);
+    Serial.print("Flow Rate     : ");
+    Serial.print(flowRate);
+    Serial.println(" L/min");
+    Serial.println("--------------------------");
 }
