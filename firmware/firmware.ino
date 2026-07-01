@@ -14,6 +14,9 @@
 #define PULSES_PER_LITRE 517.0
 // ---------------- GLOBAL VARIABLES ----------------
 volatile long pulseCount = 0;
+// ---------- CURRENT SENSOR CALIBRATION ----------
+#define ZERO_OFFSET    2950
+#define SENSITIVITY    0.100
 
 // ---------------- FLOW SENSOR INTERRUPT ----------------
 void IRAM_ATTR flowISR()
@@ -59,6 +62,26 @@ float readFlowRate()
 
     return litresPerSecond * 60.0;
 }
+float readCurrent()
+{
+    long sum = 0;
+
+    // Average 20 ADC samples
+    for (int i = 0; i < 20; i++)
+    {
+        sum += analogRead(CURRENT_PIN);
+        delay(5);
+    }
+
+    int raw = sum / 20;
+
+    float voltage = (raw / 4095.0) * 3.3;
+    float zeroVoltage = (ZERO_OFFSET / 4095.0) * 3.3;
+
+    float current = (voltage - zeroVoltage) / SENSITIVITY;
+
+    return abs(current);
+}
 void setup()
 {
     Serial.begin(115200);
@@ -93,11 +116,15 @@ void loop()
 {
     float soilMoisture = readSoilMoisture();
     float flowRate = readFlowRate();
+    float current = readCurrent();
     Serial.print("Soil Moisture : ");
     Serial.print(soilMoisture);
     Serial.println("%");
     Serial.print("Flow Rate     : ");
     Serial.print(flowRate);
     Serial.println(" L/min");
-    Serial.println("--------------------------");
+    Serial.print("Current       : ");
+    Serial.print(current);
+    Serial.println(" A");
+    Serial.println("------------------------------");
 }
