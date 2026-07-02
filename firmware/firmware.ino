@@ -14,6 +14,7 @@
 #define PULSES_PER_LITRE 517.0
 // ---------------- GLOBAL VARIABLES ----------------
 volatile long pulseCount = 0;
+bool pumpState = false;
 // ---------- CURRENT SENSOR CALIBRATION ----------
 #define ZERO_OFFSET    2950
 #define SENSITIVITY    0.100
@@ -82,6 +83,21 @@ float readCurrent()
 
     return abs(current);
 }
+void pumpON()
+{
+    digitalWrite(RELAY_PIN, PUMP_ON);
+    pumpState = true;
+
+    Serial.println("Pump Status : ON");
+}
+
+void pumpOFF()
+{
+    digitalWrite(RELAY_PIN, PUMP_OFF);
+    pumpState = false;
+
+    Serial.println("Pump Status : OFF");
+}
 void setup()
 {
     Serial.begin(115200);
@@ -117,14 +133,30 @@ void loop()
     float soilMoisture = readSoilMoisture();
     float flowRate = readFlowRate();
     float current = readCurrent();
+
     Serial.print("Soil Moisture : ");
     Serial.print(soilMoisture);
     Serial.println("%");
+
     Serial.print("Flow Rate     : ");
     Serial.print(flowRate);
     Serial.println(" L/min");
+
     Serial.print("Current       : ");
     Serial.print(current);
     Serial.println(" A");
+
     Serial.println("------------------------------");
+
+    // Demo: Toggle pump every 5 seconds
+    if (pumpState)
+    {
+        pumpOFF();
+    }
+    else
+    {
+        pumpON();
+    }
+
+    delay(5000);
 }
