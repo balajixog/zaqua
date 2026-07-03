@@ -18,6 +18,9 @@ bool pumpState = false;
 // ---------- CURRENT SENSOR CALIBRATION ----------
 #define ZERO_OFFSET    2950
 #define SENSITIVITY    0.100
+// ---------- IRRIGATION THRESHOLDS ----------
+#define MOISTURE_ON     40.0
+#define MOISTURE_OFF    70.0
 
 // ---------------- FLOW SENSOR INTERRUPT ----------------
 void IRAM_ATTR flowISR()
@@ -88,7 +91,10 @@ void pumpON()
     digitalWrite(RELAY_PIN, PUMP_ON);
     pumpState = true;
 
+    Serial.println("=================================");
+    Serial.println("Irrigation Started");
     Serial.println("Pump Status : ON");
+    Serial.println("=================================");
 }
 
 void pumpOFF()
@@ -96,7 +102,10 @@ void pumpOFF()
     digitalWrite(RELAY_PIN, PUMP_OFF);
     pumpState = false;
 
+    Serial.println("=================================");
+    Serial.println("Irrigation Completed");
     Serial.println("Pump Status : OFF");
+    Serial.println("=================================");
 }
 void setup()
 {
@@ -147,16 +156,16 @@ void loop()
     Serial.println(" A");
 
     Serial.println("------------------------------");
-
-    // Demo: Toggle pump every 5 seconds
-    if (pumpState)
-    {
-        pumpOFF();
-    }
-    else
+    // Automatic Irrigation Control
+    if (!pumpState && soilMoisture < MOISTURE_ON)
     {
         pumpON();
     }
-
-    delay(5000);
+    
+    if (pumpState && soilMoisture >= MOISTURE_OFF)
+    {
+        pumpOFF();
+    }
+    
+    delay(1000);
 }
