@@ -15,6 +15,13 @@
 // ---------------- GLOBAL VARIABLES ----------------
 volatile long pulseCount = 0;
 bool pumpState = false;
+// ---------- IRRIGATION CYCLE ----------
+int cycleID = 0;
+
+float soilBefore = 0;
+float soilAfter = 0;
+
+unsigned long cycleStart = 0;
 // ---------- CURRENT SENSOR CALIBRATION ----------
 #define ZERO_OFFSET    2950
 #define SENSITIVITY    0.100
@@ -91,8 +98,18 @@ void pumpON()
     digitalWrite(RELAY_PIN, PUMP_ON);
     pumpState = true;
 
+    cycleID++;
+    cycleStart = millis();
+
     Serial.println("=================================");
-    Serial.println("Irrigation Started");
+    Serial.print("Cycle #");
+    Serial.print(cycleID);
+    Serial.println(" Started");
+
+    Serial.print("Start Time : ");
+    Serial.print(cycleStart);
+    Serial.println(" ms");
+
     Serial.println("Pump Status : ON");
     Serial.println("=================================");
 }
@@ -102,8 +119,25 @@ void pumpOFF()
     digitalWrite(RELAY_PIN, PUMP_OFF);
     pumpState = false;
 
+    unsigned long duration = millis() - cycleStart;
+
     Serial.println("=================================");
-    Serial.println("Irrigation Completed");
+    Serial.print("Cycle #");
+    Serial.print(cycleID);
+    Serial.println(" Completed");
+
+    Serial.print("Duration : ");
+    Serial.print(duration / 1000.0);
+    Serial.println(" sec");
+
+    Serial.print("Soil Before : ");
+    Serial.print(soilBefore);
+    Serial.println("%");
+
+    Serial.print("Soil After : ");
+    Serial.print(soilAfter);
+    Serial.println("%");
+
     Serial.println("Pump Status : OFF");
     Serial.println("=================================");
 }
@@ -159,11 +193,13 @@ void loop()
     // Automatic Irrigation Control
     if (!pumpState && soilMoisture < MOISTURE_ON)
     {
+        soilBefore = soilMoisture;
         pumpON();
     }
     
     if (pumpState && soilMoisture >= MOISTURE_OFF)
     {
+        soilAfter = soilMoisture;
         pumpOFF();
     }
     
