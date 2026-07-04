@@ -17,11 +17,13 @@ volatile long pulseCount = 0;
 bool pumpState = false;
 // ---------- IRRIGATION CYCLE ----------
 int cycleID = 0;
+// ---------- FAULT THRESHOLDS ----------
+#define OVERLOAD_CURRENT 3.5
 
 float soilBefore = 0;
 float soilAfter = 0;
-
 unsigned long cycleStart = 0;
+bool faultOverload = false;
 // ---------- CURRENT SENSOR CALIBRATION ----------
 #define ZERO_OFFSET    2950
 #define SENSITIVITY    0.100
@@ -73,25 +75,24 @@ float readFlowRate()
 
     return litresPerSecond * 60.0;
 }
-float readCurrent()
+bool detectOverload(float current)
 {
-    long sum = 0;
-
-    // Average 20 ADC samples
-    for (int i = 0; i < 20; i++)
+    if (current > OVERLOAD_CURRENT)
     {
-        sum += analogRead(CURRENT_PIN);
-        delay(5);
+        faultOverload = true;
+
+        Serial.println("=================================");
+        Serial.println("FAULT DETECTED");
+        Serial.println("Reason : OVERLOAD");
+        Serial.println("Pump stopped to protect hardware.");
+        Serial.println("=================================");
+
+        pumpOFF();
+
+        return true;
     }
 
-    int raw = sum / 20;
-
-    float voltage = (raw / 4095.0) * 3.3;
-    float zeroVoltage = (ZERO_OFFSET / 4095.0) * 3.3;
-
-    float current = (voltage - zeroVoltage) / SENSITIVITY;
-
-    return abs(current);
+    return false;
 }
 void pumpON()
 {
@@ -176,6 +177,14 @@ void loop()
     float soilMoisture = readSoilMoisture();
     float flowRate = readFlowRate();
     float current = readCurrent();
+    if (pumpState)
+{
+    if (detectOverload(current))
+    {
+        delay(1000);
+        return;
+    }
+}
 
     Serial.print("Soil Moisture : ");
     Serial.print(soilMoisture);
