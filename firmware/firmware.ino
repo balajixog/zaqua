@@ -19,11 +19,17 @@ bool pumpState = false;
 int cycleID = 0;
 // ---------- FAULT THRESHOLDS ----------
 #define OVERLOAD_CURRENT 3.5
+#define DRY_RUN_FLOW    0.05
+#define DRY_RUN_DELAY   5000
 
 float soilBefore = 0;
 float soilAfter = 0;
 unsigned long cycleStart = 0;
 bool faultOverload = false;
+bool faultDryRun = false;
+
+bool dryRunTimer = false;
+unsigned long dryRunStart = 0;
 // ---------- CURRENT SENSOR CALIBRATION ----------
 #define ZERO_OFFSET    2950
 #define SENSITIVITY    0.100
@@ -94,10 +100,44 @@ bool detectOverload(float current)
 
     return false;
 }
+bool detectDryRun(float flowRate)
+{
+    if (flowRate < DRY_RUN_FLOW)
+    {
+        if (!dryRunTimer)
+        {
+            dryRunTimer = true;
+            dryRunStart = millis();
+        }
+        else if (millis() - dryRunStart >= DRY_RUN_DELAY)
+        {
+            faultDryRun = true;
+
+            Serial.println("=================================");
+            Serial.println("FAULT DETECTED");
+            Serial.println("Reason : DRY RUN");
+            Serial.println("No water flow detected.");
+            Serial.println("Pump stopped to prevent damage.");
+            Serial.println("=================================");
+
+            pumpOFF();
+
+            return true;
+        }
+    }
+    else
+    {
+        dryRunTimer = false;
+    }
+
+    return false;
+}
 void pumpON()
 {
     digitalWrite(RELAY_PIN, PUMP_ON);
     pumpState = true;
+    dryRunTimer = false;
+    faultDryRun = false;
 
     cycleID++;
     cycleStart = millis();
@@ -178,13 +218,19 @@ void loop()
     float flowRate = readFlowRate();
     float current = readCurrent();
     if (pumpState)
-{
-    if (detectOverload(current))
     {
-        delay(1000);
-        return;
+        if (detectOverload(current))
+        {
+            delay(1000);
+            return;
+        }
+    
+        if (detectDryRun(flowRate))
+        {
+            delay(1000);
+            return;
+        }
     }
-}
 
     Serial.print("Soil Moisture : ");
     Serial.print(soilMoisture);
