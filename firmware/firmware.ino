@@ -1,296 +1,285 @@
-// ---------- PIN DEFINITIONS ----------
-#define SOIL_PIN       34
-#define FLOW_PIN       18
-#define CURRENT_PIN    35
-#define RELAY_PIN      19
+#define SOIL_PIN 34
+#define FLOW_PIN 18
+#define CURRENT_PIN 35
+#define RELAY_PIN 19
 
-// ---------- RELAY LOGIC ----------
-#define PUMP_ON   HIGH
-#define PUMP_OFF  LOW
-// ---------- SOIL SENSOR CALIBRATION ----------
-#define AIR_VALUE      3271
-#define WATER_VALUE    1080
-// ---------- FLOW SENSOR CALIBRATION ----------
+#define PUMP_ON HIGH
+#define PUMP_OFF LOW
+
+#define AIR_VALUE 3271
+#define WATER_VALUE 1080
+
 #define PULSES_PER_LITRE 517.0
-// ---------------- GLOBAL VARIABLES ----------------
-volatile long pulseCount = 0;
-bool pumpState = false;
-// ---------- IRRIGATION CYCLE ----------
-int cycleID = 0;
-// ---------- FAULT THRESHOLDS ----------
+
+#define ZERO_OFFSET 2950
+#define SENSITIVITY 0.100
+
+#define MOISTURE_ON 40.0
+#define MOISTURE_OFF 70.0
+
 #define OVERLOAD_CURRENT 3.5
-#define DRY_RUN_FLOW    0.05
-#define DRY_RUN_DELAY   5000
+#define DRY_RUN_FLOW 0.05
+#define DRY_RUN_DELAY 5000
 
-#define BLOCKAGE_CURRENT    2.5
-#define BLOCKAGE_FLOW       0.30
+#define BLOCKAGE_CURRENT 2.5
+#define BLOCKAGE_FLOW 0.30
 
+#define LEAKAGE_MIN_WATER 2.0
+#define LEAKAGE_SOIL_GAIN 5.0
+
+volatile long pulseCount = 0;
+
+bool pumpState = false;
+
+int cycleID = 0;
 float soilBefore = 0;
 float soilAfter = 0;
 unsigned long cycleStart = 0;
+
+float totalLitres = 0;
+
 bool faultOverload = false;
 bool faultDryRun = false;
 bool faultBlockage = false;
+bool faultLeakage = false;
 
 bool dryRunTimer = false;
 unsigned long dryRunStart = 0;
-// ---------- CURRENT SENSOR CALIBRATION ----------
-#define ZERO_OFFSET    2950
-#define SENSITIVITY    0.100
-// ---------- IRRIGATION THRESHOLDS ----------
-#define MOISTURE_ON     40.0
-#define MOISTURE_OFF    70.0
 
-// ---------------- FLOW SENSOR INTERRUPT ----------------
 void IRAM_ATTR flowISR()
 {
     pulseCount++;
 }
+
 float readSoilMoisture()
 {
     long total = 0;
 
-    // Average 10 readings to reduce noise
-    for (int i = 0; i < 10; i++)
+    for(int i=0;i<10;i++)
     {
         total += analogRead(SOIL_PIN);
         delay(5);
     }
 
-    int rawValue = total / 10;
+    int raw = total/10;
 
-    float moisture = map(
-        rawValue,
-        AIR_VALUE,
-        WATER_VALUE,
-        0,
-        100
-    );
-
-    moisture = constrain(moisture, 0.0, 100.0);
-
-    return moisture;
+    float moisture = map(raw,AIR_VALUE,WATER_VALUE,0,100);
+    return constrain(moisture,0,100);
 }
+
 float readFlowRate()
 {
-    long startPulses = pulseCount;
-
+    long start = pulseCount;
     delay(1000);
+    long end = pulseCount;
 
-    long endPulses = pulseCount;
-
-    long pulseDifference = endPulses - startPulses;
-
-    float litresPerSecond = pulseDifference / PULSES_PER_LITRE;
-
-    return litresPerSecond * 60.0;
+    float lps = (end-start)/PULSES_PER_LITRE;
+    return lps*60.0;
 }
-bool detectOverload(float current)
+
+float readCurrent()
 {
-    if (current > OVERLOAD_CURRENT)
+    long total=0;
+
+    for(int i=0;i<20;i++)
     {
-        faultOverload = true;
+        total += analogRead(CURRENT_PIN);
+        delay(2);
+    }
+
+    float adc = total/20.0;
+
+    float voltage = adc * (3300.0/4095.0);
+
+    float current = (voltage - ZERO_OFFSET)/1000.0;
+    current /= SENSITIVITY;
+
+    return abs(current);
+}
+
+bool detectLeakage()
+{
+    float soilGain = soilAfter-soilBefore;
+
+    if(totalLitres>=LEAKAGE_MIN_WATER &&
+       soilGain<LEAKAGE_SOIL_GAIN)
+    {
+        faultLeakage=true;
 
         Serial.println("=================================");
-        Serial.println("FAULT DETECTED");
-        Serial.println("Reason : OVERLOAD");
-        Serial.println("Pump stopped to protect hardware.");
+        Serial.println("WARNING");
+        Serial.println("Possible Leakage Detected");
+        Serial.print("Water Delivered : ");
+        Serial.print(totalLitres);
+        Serial.println(" L");
+        Serial.print("Soil Gain : ");
+        Serial.print(soilGain);
+        Serial.println(" %");
         Serial.println("=================================");
-
-        pumpOFF();
 
         return true;
     }
 
     return false;
 }
-bool detectDryRun(float flowRate)
+
+void pumpON()
 {
-    if (flowRate < DRY_RUN_FLOW)
+    digitalWrite(RELAY_PIN,PUMP_ON);
+
+    pumpState=true;
+
+    cycleID++;
+    cycleStart=millis();
+
+    totalLitres=0;
+
+    dryRunTimer=false;
+
+    faultOverload=false;
+    faultDryRun=false;
+    faultBlockage=false;
+    faultLeakage=false;
+
+    Serial.println("Cycle Started");
+}
+
+void pumpOFF(float currentSoil)
+{
+    soilAfter=currentSoil;
+
+    digitalWrite(RELAY_PIN,PUMP_OFF);
+    pumpState=false;
+
+    unsigned long duration=millis()-cycleStart;
+
+    detectLeakage();
+
+    Serial.println("=================================");
+    Serial.print("Cycle #");
+    Serial.println(cycleID);
+
+    Serial.print("Duration : ");
+    Serial.print(duration/1000.0);
+    Serial.println(" sec");
+
+    Serial.print("Soil Before : ");
+    Serial.println(soilBefore);
+
+    Serial.print("Soil After : ");
+    Serial.println(soilAfter);
+
+    Serial.print("Water Delivered : ");
+    Serial.print(totalLitres);
+    Serial.println(" L");
+
+    Serial.println("Pump Status : OFF");
+    Serial.println("=================================");
+}
+
+bool detectOverload(float current)
+{
+    if(current>OVERLOAD_CURRENT)
     {
-        if (!dryRunTimer)
+        faultOverload=true;
+        dryRunTimer=false;
+
+        Serial.println("FAULT : OVERLOAD");
+        pumpOFF(readSoilMoisture());
+
+        return true;
+    }
+
+    return false;
+}
+
+bool detectDryRun(float flow)
+{
+    if(flow<DRY_RUN_FLOW)
+    {
+        if(!dryRunTimer)
         {
-            dryRunTimer = true;
-            dryRunStart = millis();
+            dryRunTimer=true;
+            dryRunStart=millis();
         }
-        else if (millis() - dryRunStart >= DRY_RUN_DELAY)
+        else if(millis()-dryRunStart>=DRY_RUN_DELAY)
         {
-            faultDryRun = true;
+            faultDryRun=true;
 
-            Serial.println("=================================");
-            Serial.println("FAULT DETECTED");
-            Serial.println("Reason : DRY RUN");
-            Serial.println("No water flow detected.");
-            Serial.println("Pump stopped to prevent damage.");
-            Serial.println("=================================");
-
-            pumpOFF();
+            Serial.println("FAULT : DRY RUN");
+            pumpOFF(readSoilMoisture());
 
             return true;
         }
     }
     else
     {
-        dryRunTimer = false;
+        dryRunTimer=false;
     }
 
     return false;
 }
 
-bool detectBlockage(float current, float flowRate)
+bool detectBlockage(float current,float flow)
 {
-    if (current >= BLOCKAGE_CURRENT &&
-        flowRate < BLOCKAGE_FLOW)
+    if(current>=BLOCKAGE_CURRENT &&
+       flow<BLOCKAGE_FLOW)
     {
-        faultBlockage = true;
+        faultBlockage=true;
 
-        Serial.println("=================================");
-        Serial.println("WARNING");
-        Serial.println("Possible Blockage Detected");
-        Serial.print("Current : ");
-        Serial.print(current);
-        Serial.println(" A");
-
-        Serial.print("Flow    : ");
-        Serial.print(flowRate);
-        Serial.println(" L/min");
-
-        Serial.println("Check pipe or filter.");
-        Serial.println("=================================");
+        Serial.println("WARNING : Possible Blockage");
 
         return true;
     }
 
-    faultBlockage = false;
+    faultBlockage=false;
 
     return false;
 }
-void pumpON()
-{
-    digitalWrite(RELAY_PIN, PUMP_ON);
-    pumpState = true;
-    dryRunTimer = false;
-    faultDryRun = false;
 
-    cycleID++;
-    cycleStart = millis();
-
-    Serial.println("=================================");
-    Serial.print("Cycle #");
-    Serial.print(cycleID);
-    Serial.println(" Started");
-
-    Serial.print("Start Time : ");
-    Serial.print(cycleStart);
-    Serial.println(" ms");
-
-    Serial.println("Pump Status : ON");
-    Serial.println("=================================");
-}
-
-void pumpOFF()
-{
-    digitalWrite(RELAY_PIN, PUMP_OFF);
-    pumpState = false;
-
-    unsigned long duration = millis() - cycleStart;
-
-    Serial.println("=================================");
-    Serial.print("Cycle #");
-    Serial.print(cycleID);
-    Serial.println(" Completed");
-
-    Serial.print("Duration : ");
-    Serial.print(duration / 1000.0);
-    Serial.println(" sec");
-
-    Serial.print("Soil Before : ");
-    Serial.print(soilBefore);
-    Serial.println("%");
-
-    Serial.print("Soil After : ");
-    Serial.print(soilAfter);
-    Serial.println("%");
-
-    Serial.println("Pump Status : OFF");
-    Serial.println("=================================");
-}
 void setup()
 {
     Serial.begin(115200);
-    delay(500);
 
-    // Configure GPIO
-    pinMode(SOIL_PIN, INPUT);
-    pinMode(CURRENT_PIN, INPUT);
-    pinMode(FLOW_PIN, INPUT_PULLUP);
+    pinMode(SOIL_PIN,INPUT);
+    pinMode(CURRENT_PIN,INPUT);
+    pinMode(FLOW_PIN,INPUT_PULLUP);
+    pinMode(RELAY_PIN,OUTPUT);
 
-    pinMode(RELAY_PIN, OUTPUT);
+    digitalWrite(RELAY_PIN,PUMP_OFF);
 
-    // Keep pump OFF at startup
-    digitalWrite(RELAY_PIN, PUMP_OFF);
-
-    // Configure flow sensor interrupt
-    attachInterrupt(
-        digitalPinToInterrupt(FLOW_PIN),
-        flowISR,
-        RISING
-    );
-
-    Serial.println();
-    Serial.println("==================================");
-    Serial.println(" HybridFlow Firmware");
-    Serial.println(" Hardware Initialized");
-    Serial.println(" ESP32 Ready");
-    Serial.println("==================================");
+    attachInterrupt(digitalPinToInterrupt(FLOW_PIN),flowISR,RISING);
 }
 
 void loop()
 {
-    float soilMoisture = readSoilMoisture();
-    float flowRate = readFlowRate();
-    float current = readCurrent();
-    if (pumpState)
+    float soil=readSoilMoisture();
+    float flow=readFlowRate();
+    float current=readCurrent();
+
+    if(pumpState)
     {
-        if (detectOverload(current))
-        {
-            delay(1000);
+        totalLitres += flow/60.0;
+
+        if(detectOverload(current))
             return;
-        }
-    
-        if (detectDryRun(flowRate))
-        {
-            delay(1000);
+
+        if(detectDryRun(flow))
             return;
-        }
-        detectBlockage(current, flowRate);
+
+        detectBlockage(current,flow);
     }
 
-    Serial.print("Soil Moisture : ");
-    Serial.print(soilMoisture);
-    Serial.println("%");
-
-    Serial.print("Flow Rate     : ");
-    Serial.print(flowRate);
-    Serial.println(" L/min");
-
-    Serial.print("Current       : ");
-    Serial.print(current);
-    Serial.println(" A");
-
-    Serial.println("------------------------------");
-    // Automatic Irrigation Control
-    if (!pumpState && soilMoisture < MOISTURE_ON)
+    if(!pumpState && soil<MOISTURE_ON)
     {
-        soilBefore = soilMoisture;
+        soilBefore=soil;
         pumpON();
     }
-    
-    if (pumpState && soilMoisture >= MOISTURE_OFF)
+
+    if(pumpState && soil>=MOISTURE_OFF)
     {
-        soilAfter = soilMoisture;
-        pumpOFF();
+        pumpOFF(soil);
     }
-    
+
     delay(1000);
 }
