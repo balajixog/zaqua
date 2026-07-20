@@ -22,11 +22,15 @@ int cycleID = 0;
 #define DRY_RUN_FLOW    0.05
 #define DRY_RUN_DELAY   5000
 
+#define BLOCKAGE_CURRENT    2.5
+#define BLOCKAGE_FLOW       0.30
+
 float soilBefore = 0;
 float soilAfter = 0;
 unsigned long cycleStart = 0;
 bool faultOverload = false;
 bool faultDryRun = false;
+bool faultBlockage = false;
 
 bool dryRunTimer = false;
 unsigned long dryRunStart = 0;
@@ -132,6 +136,35 @@ bool detectDryRun(float flowRate)
 
     return false;
 }
+
+bool detectBlockage(float current, float flowRate)
+{
+    if (current >= BLOCKAGE_CURRENT &&
+        flowRate < BLOCKAGE_FLOW)
+    {
+        faultBlockage = true;
+
+        Serial.println("=================================");
+        Serial.println("WARNING");
+        Serial.println("Possible Blockage Detected");
+        Serial.print("Current : ");
+        Serial.print(current);
+        Serial.println(" A");
+
+        Serial.print("Flow    : ");
+        Serial.print(flowRate);
+        Serial.println(" L/min");
+
+        Serial.println("Check pipe or filter.");
+        Serial.println("=================================");
+
+        return true;
+    }
+
+    faultBlockage = false;
+
+    return false;
+}
 void pumpON()
 {
     digitalWrite(RELAY_PIN, PUMP_ON);
@@ -230,6 +263,7 @@ void loop()
             delay(1000);
             return;
         }
+        detectBlockage(current, flowRate);
     }
 
     Serial.print("Soil Moisture : ");
