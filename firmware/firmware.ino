@@ -179,6 +179,7 @@ void pumpOFF(float currentSoil)
     calculateDIIS();
     detectLeakage();
     exportCSV();
+    printCycleSummary();
 
     digitalWrite(RELAY_PIN,PUMP_OFF);
     pumpState=false;
@@ -433,6 +434,119 @@ void exportCSV()
     Serial.print(",");
 
     Serial.println(faultName);
+}
+void printCycleSummary()
+{
+    Serial.println();
+    Serial.println("==============================================");
+    Serial.println("      HYBRIDFLOW IRRIGATION REPORT");
+    Serial.println("==============================================");
+
+    Serial.print("Cycle ID           : ");
+    Serial.println(cycleID);
+
+    Serial.print("Duration           : ");
+    Serial.print((millis() - cycleStart) / 1000.0);
+    Serial.println(" sec");
+
+    Serial.println();
+
+    Serial.println("----- Soil -----");
+
+    Serial.print("Before             : ");
+    Serial.print(soilBefore);
+    Serial.println("%");
+
+    Serial.print("After              : ");
+    Serial.print(soilAfter);
+    Serial.println("%");
+
+    Serial.println();
+
+    Serial.println("----- Water -----");
+
+    Serial.print("Average Flow       : ");
+    Serial.print(avgFlow);
+    Serial.println(" L/min");
+
+    Serial.print("Water Delivered    : ");
+    Serial.print(totalLitres);
+    Serial.println(" L");
+
+    Serial.println();
+
+    Serial.println("----- Electrical -----");
+
+    Serial.print("Average Current    : ");
+    Serial.print(avgCurrent);
+    Serial.println(" A");
+
+    Serial.println();
+
+    Serial.println("----- KPIs -----");
+
+    Serial.print("ECI                : ");
+    Serial.println(ECI);
+
+    Serial.print("HCI                : ");
+    Serial.println(HCI);
+
+    Serial.print("SRIt               : ");
+    Serial.println(SRIt);
+
+    Serial.print("EUI                : ");
+    Serial.println(EUI);
+
+    Serial.println();
+
+    Serial.println("----- DIIS -----");
+
+    Serial.print("Score              : ");
+    Serial.println(DIIS);
+
+    Serial.print("Status             : ");
+
+    if (DIIS >= 85)
+        Serial.println("EXCELLENT");
+    else if (DIIS >= 70)
+        Serial.println("GOOD");
+    else if (DIIS >= 50)
+        Serial.println("FAIR");
+    else
+        Serial.println("POOR");
+
+    Serial.println();
+
+    Serial.print("Fault              : ");
+    Serial.println(faultName);
+
+    Serial.println();
+
+    Serial.print("Recommendation     : ");
+
+    if (faultName == "NONE")
+    {
+        Serial.println("System operating normally.");
+    }
+    else if (faultName == "OVERLOAD")
+    {
+        Serial.println("Inspect pump motor and electrical load.");
+    }
+    else if (faultName == "DRY_RUN")
+    {
+        Serial.println("Check water source.");
+    }
+    else if (faultName == "BLOCKAGE")
+    {
+        Serial.println("Inspect pipe or filter.");
+    }
+    else if (faultName == "LEAKAGE")
+    {
+        Serial.println("Inspect irrigation lines.");
+    }
+
+    Serial.println("==============================================");
+    Serial.println();
 }
 void setup()
 {
