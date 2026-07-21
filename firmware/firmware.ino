@@ -68,6 +68,8 @@ float EUI_norm = 0.0;
 // ---------- FINAL SCORE ----------
 float DIIS = 0.0;
 
+String faultName = "NONE";
+
 void IRAM_ATTR flowISR()
 {
     pulseCount++;
@@ -148,7 +150,7 @@ bool detectLeakage()
 void pumpON()
 {
     digitalWrite(RELAY_PIN,PUMP_ON);
-
+    faultName = "NONE";
     pumpState=true;
 
     cycleID++;
@@ -176,6 +178,7 @@ void pumpOFF(float currentSoil)
     calculateKPIs();
     calculateDIIS();
     detectLeakage();
+    exportCSV();
 
     digitalWrite(RELAY_PIN,PUMP_OFF);
     pumpState=false;
@@ -268,6 +271,7 @@ bool detectOverload(float current)
     if(current>OVERLOAD_CURRENT)
     {
         faultOverload=true;
+        faultName = "OVERLOAD";
         dryRunTimer=false;
 
         Serial.println("FAULT : OVERLOAD");
@@ -286,6 +290,7 @@ bool detectDryRun(float flow)
         if(!dryRunTimer)
         {
             dryRunTimer=true;
+            faultName = "DRY_RUN";
             dryRunStart=millis();
         }
         else if(millis()-dryRunStart>=DRY_RUN_DELAY)
@@ -312,7 +317,7 @@ bool detectBlockage(float current,float flow)
        flow<BLOCKAGE_FLOW)
     {
         faultBlockage=true;
-
+        faultName = "BLOCKAGE";
         Serial.println("WARNING : Possible Blockage");
 
         return true;
@@ -375,7 +380,60 @@ void calculateDIIS()
         (SRIt_norm * 0.25) +
         (EUI_norm * 0.25);
 }
+void exportCSV()
+{
+    float duration = (millis() - cycleStart) / 1000.0;
 
+    Serial.print(cycleID);
+    Serial.print(",");
+
+    Serial.print(duration);
+    Serial.print(",");
+
+    Serial.print(soilBefore);
+    Serial.print(",");
+
+    Serial.print(soilAfter);
+    Serial.print(",");
+
+    Serial.print(avgCurrent);
+    Serial.print(",");
+
+    Serial.print(avgFlow);
+    Serial.print(",");
+
+    Serial.print(totalLitres);
+    Serial.print(",");
+
+    Serial.print(ECI);
+    Serial.print(",");
+
+    Serial.print(HCI);
+    Serial.print(",");
+
+    Serial.print(SRIt);
+    Serial.print(",");
+
+    Serial.print(EUI);
+    Serial.print(",");
+
+    Serial.print(ECI_norm);
+    Serial.print(",");
+
+    Serial.print(HCI_norm);
+    Serial.print(",");
+
+    Serial.print(SRIt_norm);
+    Serial.print(",");
+
+    Serial.print(EUI_norm);
+    Serial.print(",");
+
+    Serial.print(DIIS);
+    Serial.print(",");
+
+    Serial.println(faultName);
+}
 void setup()
 {
     Serial.begin(115200);
@@ -388,6 +446,8 @@ void setup()
     digitalWrite(RELAY_PIN,PUMP_OFF);
 
     attachInterrupt(digitalPinToInterrupt(FLOW_PIN),flowISR,RISING);
+    Serial.println();
+    Serial.println("cycle_id,duration_sec,soil_before,soil_after,avg_current_A,avg_flow_Lmin,total_litres,ECI,HCI,SRIt,EUI,ECI_norm,HCI_norm,SRIt_norm,EUI_norm,DIIS,fault");
 }
 
 void loop()
