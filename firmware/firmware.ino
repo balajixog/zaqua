@@ -27,6 +27,7 @@
 #define LEAKAGE_MIN_WATER 2.0
 #define LEAKAGE_SOIL_GAIN 5.0
 
+
 volatile long pulseCount = 0;
 
 bool pumpState = false;
@@ -45,6 +46,18 @@ bool faultLeakage = false;
 
 bool dryRunTimer = false;
 unsigned long dryRunStart = 0;
+
+float avgCurrent = 0.0;
+float avgFlow = 0.0;
+
+float currentSum = 0.0;
+float flowSum = 0.0;
+int sampleCount = 0;
+
+float ECI = 0.0;
+float HCI = 0.0;
+float SRIt = 0.0;
+float EUI = 0.0;
 
 void IRAM_ATTR flowISR()
 {
@@ -132,6 +145,10 @@ void pumpON()
     cycleID++;
     cycleStart=millis();
 
+    currentSum = 0.0;
+    flowSum = 0.0;
+    sampleCount = 0;
+
     totalLitres=0;
 
     dryRunTimer=false;
@@ -147,6 +164,8 @@ void pumpON()
 void pumpOFF(float currentSoil)
 {
     soilAfter=currentSoil;
+    calculateKPIs();
+    detectLeakage();
 
     digitalWrite(RELAY_PIN,PUMP_OFF);
     pumpState=false;
@@ -175,6 +194,29 @@ void pumpOFF(float currentSoil)
 
     Serial.println("Pump Status : OFF");
     Serial.println("=================================");
+    Serial.println("----------- KPIs -----------");
+
+    Serial.print("Average Current : ");
+    Serial.print(avgCurrent);
+    Serial.println(" A");
+
+    Serial.print("Average Flow : ");
+    Serial.print(avgFlow);
+    Serial.println(" L/min");
+
+    Serial.print("ECI : ");
+    Serial.println(ECI);
+
+    Serial.print("HCI : ");
+    Serial.println(HCI);
+
+    Serial.print("SRIt : ");
+    Serial.println(SRIt);
+
+    Serial.print("EUI : ");
+    Serial.println(EUI);
+
+    Serial.println("----------------------------");
 }
 
 bool detectOverload(float current)
@@ -236,6 +278,34 @@ bool detectBlockage(float current,float flow)
 
     return false;
 }
+void calculateKPIs()
+{
+    if (sampleCount == 0)
+        return;
+
+    avgCurrent = currentSum / sampleCount;
+    avgFlow = flowSum / sampleCount;
+
+    float soilGain = soilAfter - soilBefore;
+
+    // Electrical Conversion Indicator
+    if (avgCurrent > 0)
+        ECI = avgFlow / avgCurrent;
+    else
+        ECI = 0;
+
+    // Hydraulic Consistency Indicator
+    HCI = avgFlow;
+
+    // Soil Recovery Indicator
+    SRIt = soilGain;
+
+    // Energy Utilization Indicator
+    if (avgCurrent > 0)
+        EUI = soilGain / avgCurrent;
+    else
+        EUI = 0;
+}
 
 void setup()
 {
@@ -259,6 +329,9 @@ void loop()
 
     if(pumpState)
     {
+        currentSum += current;
+        flowSum += flow;
+        sampleCount++;
         totalLitres += flow/60.0;
 
         if(detectOverload(current))
